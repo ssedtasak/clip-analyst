@@ -20,5 +20,5 @@ ALLOWED_ORIGIN = ""
     Access-Control-Allow-Methods = "POST, OPTIONS"
     Access-Control-Allow-Headers = "Content-Type"
 
-# Environment variables (set via `wrangler secret put OPENAI_API_KEY`)
-# Required: OPENAI_API_KEY
+# Environment variables (set via `wrangler secret put MINIMAX_API_KEY`)
+# Required: MINIMAX_API_KEY (or OPENAI_API_KEY as fallback)

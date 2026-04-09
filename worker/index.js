@@ -1,9 +1,12 @@
 /**
- * Clip Analyst — Cloudflare Worker v2
- * API proxy with CORS restriction, retry logic, and better error handling
+ * Clip Analyst — Cloudflare Worker v3
+ * API proxy with MiniMax support (OpenAI-compatible)
+ * Supports both MiniMax and OpenAI APIs
  */
 
-const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
+const AI_API_URL = 'https://api.minimax.io/v1/chat/completions';
+const AI_MODEL = 'MiniMax-M2.7';    // Video analysis model
+const BRIEF_MODEL = 'MiniMax-M2.5'; // Brief generation model
 
 const PROMPTS = {
   videoAnalysis: `You are an expert video analyst specializing in short-form social media content (Instagram Reels, TikTok). Your job is to analyze the provided video frame-by-frame and create a detailed shot-by-shot breakdown.
@@ -138,9 +141,15 @@ export default {
       });
     }
 
-    const apiKey = env.OPENAI_API_KEY;
+    // Support both MiniMax and OpenAI API keys
+    const apiKey = env.MINIMAX_API_KEY || env.OPENAI_API_KEY;
+    const isMiniMax = !env.OPENAI_API_KEY || env.MINIMAX_API_KEY;
+    const baseUrl = isMiniMax ? AI_API_URL : 'https://api.openai.com/v1';
+    const analysisModel = isMiniMax ? AI_MODEL : 'gpt-4o';
+    const briefModel = isMiniMax ? BRIEF_MODEL : 'gpt-4o-mini';
+
     if (!apiKey) {
-      return new Response(JSON.stringify({ error: 'API not configured' }), {
+      return new Response(JSON.stringify({ error: 'API not configured. Set MINIMAX_API_KEY or OPENAI_API_KEY' }), {
         status: 500,
         headers: { ...corsHeaders(allowedOrigin || origin), 'Content-Type': 'application/json' }
       });
@@ -194,20 +203,20 @@ export default {
 
           let analysisResponse;
           try {
-            analysisResponse = await fetchWithRetry(OPENAI_API_URL, {
+            analysisResponse = await fetchWithRetry(baseUrl, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${apiKey}`
               },
               body: JSON.stringify({
-                model: 'gpt-4o',
+                model: analysisModel,
                 messages: [
                   { role: 'system', content: PROMPTS.videoAnalysis },
                   { role: 'user', content: analysisUser }
                 ],
                 max_tokens: 4000,
-                temperature: 0.3,
+                temperature: isMiniMax ? 0.01 : 0.3,
                 stream: true
               })
             }, 2, 1500);
@@ -219,7 +228,7 @@ export default {
 
           if (!analysisResponse.ok) {
             const err = await analysisResponse.json().catch(() => ({}));
-            const msg = err.error?.message || `OpenAI error: ${analysisResponse.status}`;
+            const msg = err.error?.message || `API error: ${analysisResponse.status}`;
             send({ error: msg });
             controller.close();
             return;
@@ -257,20 +266,20 @@ export default {
 
           let briefResponse;
           try {
-            briefResponse = await fetchWithRetry(OPENAI_API_URL, {
+            briefResponse = await fetchWithRetry(baseUrl, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${apiKey}`
               },
               body: JSON.stringify({
-                model: 'gpt-4o-mini',
+                model: briefModel,
                 messages: [
                   { role: 'system', content: PROMPTS.briefGeneration },
                   { role: 'user', content: briefUser }
                 ],
                 max_tokens: 4000,
-                temperature: 0.4,
+                temperature: isMiniMax ? 0.01 : 0.4,
                 stream: true
               })
             }, 2, 1500);
@@ -282,7 +291,7 @@ export default {
 
           if (!briefResponse.ok) {
             const err = await briefResponse.json().catch(() => ({}));
-            const msg = err.error?.message || `OpenAI error: ${briefResponse.status}`;
+            const msg = err.error?.message || `API error: ${briefResponse.status}`;
             send({ error: msg });
             controller.close();
             return;

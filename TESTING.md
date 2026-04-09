@@ -13,11 +13,16 @@ npm install -g wrangler serve
 
 Edit `worker/.dev.vars`:
 ```
-OPENAI_API_KEY=sk-your-openai-key-here
+MINIMAX_API_KEY=your-minimax-api-key
 ALLOWED_ORIGIN=http://localhost:8788
 ```
 
-### 2. Start Worker (Terminal 1)
+Or set via command:
+```bash
+wrangler secret put MINIMAX_API_KEY
+```
+
+**Supported APIs:** MiniMax (primary), OpenAI (fallback)
 
 ```bash
 cd worker
