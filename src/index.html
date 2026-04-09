@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Clip Analyst — AI Recreation Clip Analyst</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .markdown-body table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.875rem; }
+    .markdown-body th, .markdown-body td { border: 1px solid #d1d5db; padding: 0.5rem 0.75rem; text-align: left; }
+    .markdown-body th { background: #f3f4f6; font-weight: 600; }
+    .markdown-body h2 { font-size: 1.25rem; font-weight: 700; margin: 1.5rem 0 0.75rem; padding-bottom: 0.25rem; border-bottom: 2px solid #e5e7eb; }
+    .markdown-body h3 { font-size: 1.1rem; font-weight: 600; margin: 1rem 0 0.5rem; }
+    .markdown-body p { margin: 0.5rem 0; }
+    .markdown-body ul { list-style: disc; padding-left: 1.5rem; margin: 0.5rem 0; }
+    .markdown-body strong { font-weight: 700; }
+    .markdown-body em { font-style: italic; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    .animate-pulse-slow { animation: pulse 2s ease-in-out infinite; }
+    .typing-cursor::after { content: '▋'; animation: pulse 1s infinite; }
+    .brand-card input[type="radio"]:checked + label { ring: 2px; }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <div class="max-w-4xl mx-auto px-4 py-8">
+
+    <!-- Header -->
+    <header class="text-center mb-8">
+      <h1 class="text-3xl font-bold text-gray-900">Clip Analyst</h1>
+      <p class="text-gray-500 mt-1">AI Recreation Clip Analyst — Paste a video link, get a production brief</p>
+    </header>
+
+    <!-- Input Form -->
+    <form id="analyze-form" class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+      <!-- URL Input -->
+      <div class="mb-5">
+        <label for="video-url" class="block text-sm font-medium text-gray-700 mb-1">Video URL</label>
+        <input
+          type="url"
+          id="video-url"
+          placeholder="Paste your Instagram Reel or TikTok URL..."
+          required
+          class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400"
+        >
+        <p class="text-xs text-gray-400 mt-1">Supports Instagram Reels and TikTok videos</p>
+      </div>
+
+      <!-- Key Message -->
+      <div class="mb-5">
+        <label for="key-message" class="block text-sm font-medium text-gray-700 mb-1">Key Message <span class="text-gray-400">(optional)</span></label>
+        <input
+          type="text"
+          id="key-message"
+          placeholder="e.g., Freshly made sushi rolls for a delightful meal"
+          class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-400"
+        >
+      </div>
+
+      <!-- Submit -->
+      <button
+        type="submit"
+        id="analyze-btn"
+        class="w-full py-3 px-6 bg-gray-900 text-white font-semibold rounded-lg hover:bg-gray-800 active:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        Analyze Clip
+      </button>
+    </form>
+
+    <!-- Error Banner -->
+    <div id="error-banner" class="hidden bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
+      <p id="error-message" class="text-red-700 text-sm"></p>
+      <button onclick="retryAnalysis()" class="mt-2 text-sm text-red-600 font-medium hover:text-red-800 underline">Try again</button>
+    </div>
+
+    <!-- Loading State -->
+    <div id="loading-state" class="hidden bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+      <div class="flex items-center gap-3 mb-4">
+        <div class="w-5 h-5 border-2 border-gray-300 border-t-gray-900 rounded-full animate-spin"></div>
+        <span id="loading-text" class="text-gray-700 font-medium">Analyzing clip...</span>
+      </div>
+      <div class="space-y-2">
+        <div class="h-4 bg-gray-100 rounded animate-pulse-slow"></div>
+        <div class="h-4 bg-gray-100 rounded animate-pulse-slow w-5/6"></div>
+        <div class="h-4 bg-gray-100 rounded animate-pulse-slow w-4/6"></div>
+      </div>
+    </div>
+
+    <!-- Results -->
+    <div id="results-section" class="hidden">
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-4">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-xl font-bold text-gray-900">Production Brief</h2>
+          <span id="result-meta" class="text-xs text-gray-400"></span>
+        </div>
+        <div id="results-content" class="markdown-body text-gray-800 leading-relaxed typing-cursor"></div>
+      </div>
+
+      <!-- Export Buttons -->
+      <div class="flex gap-3">
+        <button
+          onclick="downloadMarkdown()"
+          class="flex-1 py-2.5 px-4 bg-gray-900 text-white font-medium rounded-lg hover:bg-gray-800 transition-colors text-sm"
+        >
+          Download .md
+        </button>
+        <button
+          onclick="copyToClipboard()"
+          class="flex-1 py-2.5 px-4 bg-white text-gray-700 font-medium rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors text-sm"
+        >
+          Copy to Clipboard
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

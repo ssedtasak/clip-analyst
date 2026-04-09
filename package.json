@@ -1,0 +1,13 @@
+{
+  "name": "clip-analyst",
+  "version": "1.0.0",
+  "description": "AI Recreation Clip Analyst — Analyze video clips and generate production briefs",
+  "scripts": {
+    "dev": "npx serve src -l 3000 -s",
+    "build": "echo 'Static site — no build step required'"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "serve": "^14.2.0"
+  }
+}

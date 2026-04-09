@@ -1,0 +1,21 @@
+node_modules/
+.DS_Store
+
+# Environment secrets - NEVER commit these
+.env
+.dev.vars
+*.local.vars
+secrets.json
+api-keys.json
+credentials.json
+
+# Logs
+*.log
+wrangler.log
+
+# Cloudflare
+.wrangler/
+
+# Build output
+dist/
+build/

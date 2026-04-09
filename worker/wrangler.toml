@@ -1,0 +1,24 @@
+name = "clip-analyst-api"
+main = "index.js"
+compatibility_date = "2024-04-10"
+
+# Rate limiting: 10 requests per minute per IP
+# https://developers.cloudflare.com/workers/configuration/rate-limiting/
+[ratelimit]
+  requests_per_period = 10
+  period = 60
+
+# CORS: Update ALLOWED_ORIGIN to your GitHub Pages URL before deploying
+# Example: https://username.github.io/clip-analyst
+[vars]
+ALLOWED_ORIGIN = ""
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Access-Control-Allow-Origin = "*" # Override per-request in Worker using ALLOWED_ORIGIN
+    Access-Control-Allow-Methods = "POST, OPTIONS"
+    Access-Control-Allow-Headers = "Content-Type"
+
+# Environment variables (set via `wrangler secret put OPENAI_API_KEY`)
+# Required: OPENAI_API_KEY
