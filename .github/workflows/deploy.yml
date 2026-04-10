@@ -23,9 +23,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: deploy --name clip-analyst-api
-        env:
-          WORKDIR: worker
+          command: deploy worker/index.js --name clip-analyst-api
 
   deploy-pages:
     runs-on: ubuntu-latest
