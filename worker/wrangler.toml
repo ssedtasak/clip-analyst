@@ -20,5 +20,6 @@ ALLOWED_ORIGIN = ""
     Access-Control-Allow-Methods = "POST, OPTIONS"
     Access-Control-Allow-Headers = "Content-Type"
 
-# Environment variables (set via `wrangler secret put MINIMAX_API_KEY`)
-# Required: MINIMAX_API_KEY (or OPENAI_API_KEY as fallback)
+# Environment variables (set via `wrangler secret put`)
+# Required: GEMINI_API_KEY (for AI video analysis)
+# Optional: COBALT_API_KEY (for self-hosted Cobalt, uses public instance if not set)

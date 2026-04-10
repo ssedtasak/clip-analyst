@@ -9,20 +9,19 @@ npm install -g wrangler serve
 
 ## Setup
 
-### 1. Configure API Key
+### 1. Configure API Keys
 
-Edit `worker/.dev.vars`:
-```
-MINIMAX_API_KEY=your-minimax-api-key
-ALLOWED_ORIGIN=http://localhost:8788
-```
-
-Or set via command:
+Set secrets via command:
 ```bash
-wrangler secret put MINIMAX_API_KEY
+wrangler secret put GEMINI_API_KEY
+# Optional: for self-hosted Cobalt
+# wrangler secret put COBALT_API_KEY
 ```
 
-**Supported APIs:** MiniMax (primary), OpenAI (fallback)
+**Architecture:** URL → Cobalt API → Direct MP4 → Gemini 2.5 Flash → Analysis
+
+- **Cobalt** (public instance): Free, converts IG/TikTok URL to MP4
+- **Gemini 2.5 Flash**: 1M tokens/min free tier, video understanding
 
 ```bash
 cd worker

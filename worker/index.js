@@ -1,12 +1,17 @@
 /**
- * Clip Analyst — Cloudflare Worker v3
- * API proxy with MiniMax support (OpenAI-compatible)
- * Supports both MiniMax and OpenAI APIs
+ * Clip Analyst — Cloudflare Worker v5
+ * Uses Cobalt API to get direct MP4 link, then Gemini 2.5 Flash for video analysis
+ * Architecture per PDR: URL → Cobalt → MP4 → Gemini → Analysis
  */
 
-const AI_API_URL = 'https://api.minimax.io/v1/chat/completions';
-const AI_MODEL = 'MiniMax-M2.7';    // Video analysis model
-const BRIEF_MODEL = 'MiniMax-M2.5'; // Brief generation model
+// Cobalt API endpoint (self-hosted on Railway)
+const getCobaltUrl = (env) => {
+  const url = env.COBALT_API_URL || 'https://cobalt-api-production-70d8.up.railway.app/';
+  return url.endsWith('/') ? url : url + '/';
+};
+
+// Gemini API endpoint
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
 const PROMPTS = {
   videoAnalysis: `You are an expert video analyst specializing in short-form social media content (Instagram Reels, TikTok). Your job is to analyze the provided video frame-by-frame and create a detailed shot-by-shot breakdown.
@@ -112,6 +117,94 @@ function corsHeaders(origin) {
   };
 }
 
+// Step 1: Get direct MP4 link via Cobalt API
+async function getVideoUrl(cobaltApiUrl, videoUrl, apiKey) {
+  const headers = {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json'
+  };
+  if (apiKey) {
+    headers['Authorization'] = `Api-Key ${apiKey}`;
+  }
+  
+  const response = await fetch(cobaltApiUrl, {
+    method: 'POST',
+    headers: headers,
+    body: JSON.stringify({
+      url: videoUrl
+    })
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error?.code || `Cobalt error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  
+  if (data.status === 'error') {
+    throw new Error(data.error?.code || 'Cobalt failed to process URL');
+  }
+  
+  if (!data.url) {
+    throw new Error('No video URL returned from Cobalt');
+  }
+  
+  return data.url;
+}
+
+// Step 2: Analyze video via Gemini 2.5 Flash
+async function analyzeVideoWithGemini(videoUrl, apiKey, prompt, keyMessage) {
+  const userPrompt = keyMessage 
+    ? `${prompt}\n\nKey message to consider: ${keyMessage}`
+    : prompt;
+
+  const response = await fetchWithRetry(`${GEMINI_API_URL}?key=${apiKey}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      contents: [{
+        parts: [
+          {
+            file_data: {
+              mime_type: 'video/mp4',
+              file_uri: videoUrl
+            }
+          },
+          {
+            text: userPrompt
+          }
+        ]
+      }],
+      generationConfig: {
+        temperature: 0.3,
+        maxOutputTokens: 8192
+      }
+    })
+  }, 2, 3000);
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error?.message || `Gemini error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  
+  if (data.error) {
+    throw new Error(data.error.message || 'Gemini processing failed');
+  }
+  
+  // Extract text from response
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) {
+    throw new Error('No text in Gemini response');
+  }
+  
+  return text;
+}
+
 export default {
   async fetch(request, env, ctx) {
     const origin = request.headers.get('Origin') || '';
@@ -141,15 +234,12 @@ export default {
       });
     }
 
-    // Support both MiniMax and OpenAI API keys
-    const apiKey = env.MINIMAX_API_KEY || env.OPENAI_API_KEY;
-    const isMiniMax = !env.OPENAI_API_KEY || env.MINIMAX_API_KEY;
-    const baseUrl = isMiniMax ? AI_API_URL : 'https://api.openai.com/v1';
-    const analysisModel = isMiniMax ? AI_MODEL : 'gpt-4o';
-    const briefModel = isMiniMax ? BRIEF_MODEL : 'gpt-4o-mini';
+    // Require both Cobalt and Gemini API keys
+    const cobaltApiKey = env.COBALT_API_KEY;
+    const geminiApiKey = env.GEMINI_API_KEY;
 
-    if (!apiKey) {
-      return new Response(JSON.stringify({ error: 'API not configured. Set MINIMAX_API_KEY or OPENAI_API_KEY' }), {
+    if (!geminiApiKey) {
+      return new Response(JSON.stringify({ error: 'API not configured. Set GEMINI_API_KEY (and optionally COBALT_API_KEY) as secrets.' }), {
         status: 500,
         headers: { ...corsHeaders(allowedOrigin || origin), 'Content-Type': 'application/json' }
       });
@@ -176,7 +266,7 @@ export default {
     }
 
     const validPatterns = [
-      /instagram\.com\/(?:reel|p)\//i,
+      /instagram\.com\/(?:reel|reels|p)\//i,
       /tiktok\.com\/@.+\/video\//i,
     ];
 
@@ -196,129 +286,44 @@ export default {
         };
 
         try {
-          // Step 1: Video Analysis (with retry)
+          // Step 1: Get direct MP4 link via Cobalt
+          send({ step: 'Getting video link...' });
+          let videoUrl;
+          try {
+            videoUrl = await getVideoUrl(getCobaltUrl(env), url, cobaltApiKey);
+          } catch (err) {
+            send({ error: `Failed to get video: ${err.message}` });
+            controller.close();
+            return;
+          }
+
+          // Step 2: Video Analysis with Gemini
           send({ step: 'Analyzing shot-by-shot...' });
-
-          const analysisUser = `Analyze this video: ${url}${keyMessage ? `\nKey message: ${keyMessage}` : ''}`;
-
-          let analysisResponse;
+          let analysisText;
           try {
-            analysisResponse = await fetchWithRetry(baseUrl, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey}`
-              },
-              body: JSON.stringify({
-                model: analysisModel,
-                messages: [
-                  { role: 'system', content: PROMPTS.videoAnalysis },
-                  { role: 'user', content: analysisUser }
-                ],
-                max_tokens: 4000,
-                temperature: isMiniMax ? 0.01 : 0.3,
-                stream: true
-              })
-            }, 2, 1500);
+            analysisText = await analyzeVideoWithGemini(videoUrl, geminiApiKey, PROMPTS.videoAnalysis, keyMessage);
           } catch (err) {
-            send({ error: 'Analysis request failed after retries. Please try again.' });
+            send({ error: `Analysis failed: ${err.message}` });
             controller.close();
             return;
           }
 
-          if (!analysisResponse.ok) {
-            const err = await analysisResponse.json().catch(() => ({}));
-            const msg = err.error?.message || `API error: ${analysisResponse.status}`;
-            send({ error: msg });
-            controller.close();
-            return;
-          }
+          // Stream the analysis result
+          send({ content: analysisText });
 
-          let fullAnalysis = '';
-          const analysisReader = analysisResponse.body.getReader();
-          const analysisDecoder = new TextDecoder();
-
-          while (true) {
-            const { done, value } = await analysisReader.read();
-            if (done) break;
-
-            const chunk = analysisDecoder.decode(value);
-            const lines = chunk.split('\n').filter(l => l.startsWith('data: '));
-
-            for (const line of lines) {
-              const data = line.slice(6);
-              if (data === '[DONE]') continue;
-              try {
-                const parsed = JSON.parse(data);
-                const content = parsed.choices?.[0]?.delta?.content || '';
-                if (content) {
-                  fullAnalysis += content;
-                  send({ content });
-                }
-              } catch {}
-            }
-          }
-
-          // Step 2: Brief Generation (with retry)
+          // Step 3: Brief Generation with Gemini
           send({ step: 'Generating production brief...' });
-
-          const briefUser = `Generate a complete production brief${keyMessage ? ` (key message: "${keyMessage}")` : ''}:\n\n${fullAnalysis}`;
-
-          let briefResponse;
+          let briefText;
           try {
-            briefResponse = await fetchWithRetry(baseUrl, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey}`
-              },
-              body: JSON.stringify({
-                model: briefModel,
-                messages: [
-                  { role: 'system', content: PROMPTS.briefGeneration },
-                  { role: 'user', content: briefUser }
-                ],
-                max_tokens: 4000,
-                temperature: isMiniMax ? 0.01 : 0.4,
-                stream: true
-              })
-            }, 2, 1500);
+            briefText = await analyzeVideoWithGemini(videoUrl, geminiApiKey, PROMPTS.briefGeneration, keyMessage);
           } catch (err) {
-            send({ error: 'Brief generation failed after retries. Please try again.' });
+            send({ error: `Brief generation failed: ${err.message}` });
             controller.close();
             return;
           }
 
-          if (!briefResponse.ok) {
-            const err = await briefResponse.json().catch(() => ({}));
-            const msg = err.error?.message || `API error: ${briefResponse.status}`;
-            send({ error: msg });
-            controller.close();
-            return;
-          }
-
-          const briefReader = briefResponse.body.getReader();
-          const briefDecoder = new TextDecoder();
-
-          while (true) {
-            const { done, value } = await briefReader.read();
-            if (done) break;
-
-            const chunk = briefDecoder.decode(value);
-            const lines = chunk.split('\n').filter(l => l.startsWith('data: '));
-
-            for (const line of lines) {
-              const data = line.slice(6);
-              if (data === '[DONE]') continue;
-              try {
-                const parsed = JSON.parse(data);
-                const content = parsed.choices?.[0]?.delta?.content || '';
-                if (content) {
-                  send({ content });
-                }
-              } catch {}
-            }
-          }
+          // Stream the brief
+          send({ content: briefText });
 
           send({ done: true });
           controller.close();

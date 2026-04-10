@@ -54,7 +54,7 @@ function showError(msg) {
 
 function validateUrl(url) {
   const patterns = [
-    /instagram\.com\/(?:reel|p)\//i,
+    /instagram\.com\/(?:reel|reels|p)\//i,
     /tiktok\.com\/@.+\/video\//i,
   ];
   return patterns.some(p => p.test(url));
