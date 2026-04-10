@@ -14,6 +14,8 @@ const errorBanner = document.getElementById('error-banner');
 const errorMessage = document.getElementById('error-message');
 const loadingState = document.getElementById('loading-state');
 const loadingText = document.getElementById('loading-text');
+const loadingPercent = document.getElementById('loading-percent');
+const progressBar = document.getElementById('progress-bar');
 const resultsSection = document.getElementById('results-section');
 const resultsContent = document.getElementById('results-content');
 const resultMeta = document.getElementById('result-meta');
@@ -80,6 +82,8 @@ async function handleSubmit(e) {
   analyzeBtn.disabled = true;
 
   loadingText.textContent = LOADING_STEPS[0];
+  loadingPercent.textContent = '5%';
+  progressBar.style.width = '5%';
 
   try {
     const response = await fetch(workerUrl, {
@@ -126,6 +130,10 @@ async function handleSubmit(e) {
             if (parsed.step) {
               loadingText.textContent = parsed.step;
             }
+            if (typeof parsed.progress === 'number') {
+              loadingPercent.textContent = parsed.progress + '%';
+              progressBar.style.width = parsed.progress + '%';
+            }
             if (parsed.content) {
               currentBrief += parsed.content;
               resultsContent.innerHTML = renderMarkdown(currentBrief);
@@ -161,32 +169,75 @@ async function handleSubmit(e) {
 // ========== MARKDOWN RENDERER ==========
 
 function renderMarkdown(md) {
+  // Step 1: Basic inline formatting (before table parsing)
   let html = md
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>');
+
+  // Step 2: Parse tables properly - handle multi-line cells
+  html = parseTables(html);
+
+  // Step 3: Headers and lists
+  html = html
     .replace(/^### (.+)$/gm, '<h3>$1</h3>')
     .replace(/^## (.+)$/gm, '<h2>$1</h2>')
     .replace(/^# (.+)$/gm, '<h1>$1</h1>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
     .replace(/^- (.+)$/gm, '<li>$1</li>')
-    .replace(/^  - (.+)$/gm, '<li style="margin-left:1rem">$1</li>');
+    .replace(/^  - (.+)$/gm, '<li class="sub-item">$1</li>');
 
-  html = html.replace(/(<li[^>]*>.*<\/li>\n?)+/g, (match) => `<ul>${match}</ul>`);
+  // Step 4: Wrap consecutive list items in <ul>
+  html = html.replace(/(<li[^>]*>.*<\/li>\s*)+/g, (match) => `<ul>${match}</ul>`);
 
-  html = html.replace(/^\|(.+)\|$/gm, (match) => {
-    const cells = match.split('|').filter(c => c.trim());
-    if (cells.every(c => /^[\s-:]+$/.test(c))) return '';
-    return '<tr>' + cells.map(c => `<td>${c.trim()}</td>`).join('') + '</tr>';
+  // Step 5: Double newlines to paragraphs
+  html = html.replace(/\n{2,}/g, '</p><p>');
+  
+  return `<p>${html}</p>`;
+}
+
+function parseTables(html) {
+  // Match entire table blocks: from | header | to last | cell |
+  const tableRegex = /^\|(.+)\|[\s\S]*?\|[\s\S]*?$/gm;
+  
+  return html.replace(tableRegex, (tableBlock) => {
+    const lines = tableBlock.split('\n').filter(line => line.trim() && line.includes('|'));
+    
+    if (lines.length < 2) return tableBlock; // Not a valid table
+    
+    const rows = lines.map(line => {
+      // Split by | but preserve content within cells
+      const cells = line.split('|').slice(1, -1); // Remove empty first/last from split
+      
+      return cells.map(cell => {
+        // Convert bullet points and newlines within cell to HTML
+        let cellHtml = cell
+          .replace(/^- (.+)$/gm, '<span class="cell-bullet">•</span> $1<br>')
+          .replace(/^  - (.+)$/gm, '&nbsp;&nbsp;↳ $1<br>')
+          .replace(/\n/g, '<br>');
+        return cellHtml.trim();
+      });
+    });
+
+    // Check if first row is header
+    const isHeaderRow = rows[0].every(cell => /^[\s\-:]+$/.test(cell.replace(/<[^>]+>/g, '')));
+    const dataRows = isHeaderRow ? rows.slice(1) : rows;
+    
+    let tableHtml = '<div class="table-wrapper"><table>';
+    
+    if (!isHeaderRow || rows.length > 1) {
+      // Header
+      const headerCells = isHeaderRow ? rows[0] : ['Shot #', 'Timecode', 'Visual Description', 'Audio / Technique', 'Notes / Purpose'];
+      tableHtml += '<thead><tr>' + headerCells.map(c => `<th>${c}</th>`).join('') + '</tr></thead>';
+    }
+    
+    // Body
+    tableHtml += '<tbody>';
+    dataRows.forEach(cells => {
+      tableHtml += '<tr>' + cells.map(c => `<td>${c}</td>`).join('') + '</tr>';
+    });
+    tableHtml += '</tbody></table></div>';
+    
+    return tableHtml;
   });
-
-  html = html.replace(/(<tr>.*<\/tr>\s*)+/g, (match) => {
-    const firstRow = match.indexOf('</tr>');
-    const headerHtml = match.substring(0, firstRow + 5).replace(/td>/g, 'th>');
-    const bodyHtml = match.substring(firstRow + 5);
-    return `<table><thead>${headerHtml}</thead><tbody>${bodyHtml}</tbody></table>`;
-  });
-
-  html = html.replace(/\n{2,}/g, '<br><br>');
-  return html;
 }
 
 // ========== EXPORT ==========
@@ -203,10 +254,78 @@ function downloadMarkdown() {
   URL.revokeObjectURL(a.href);
 }
 
-function copyToClipboard() {
+function downloadPDF() {
+  if (!currentBrief) return;
+  // Use print dialog for PDF
+  const printWindow = window.open('', '_blank');
+  printWindow.document.write(`
+    <html>
+    <head>
+      <title>Production Brief - ${new Date().toLocaleDateString()}</title>
+      <style>
+        body { font-family: Arial, sans-serif; padding: 20px; line-height: 1.6; }
+        h1 { font-size: 24px; border-bottom: 2px solid #333; padding-bottom: 10px; }
+        h2 { font-size: 18px; margin-top: 24px; border-bottom: 1px solid #ddd; padding-bottom: 5px; }
+        h3 { font-size: 16px; margin-top: 16px; }
+        table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 12px; }
+        th, td { border: 1px solid #333; padding: 8px; text-align: left; vertical-align: top; }
+        th { background: #f5f5f5; font-weight: bold; }
+        td:first-child { text-align: center; font-weight: bold; }
+        ul { margin: 8px 0; padding-left: 20px; }
+        li { margin: 4px 0; }
+        strong { font-weight: bold; }
+        .meta { color: #666; font-size: 12px; margin-bottom: 20px; }
+      </style>
+    </head>
+    <body>
+      <h1>🎬 Production Brief</h1>
+      <p class="meta">Generated on ${new Date().toLocaleDateString()} | Clip Analyst</p>
+      <div id="content">${resultsContent.innerHTML}</div>
+    </body>
+    </html>
+  `);
+  printWindow.document.close();
+  printWindow.print();
+}
+
+function copyToLINE(e) {
+  if (!currentBrief) return;
+  // Convert markdown to LINE-friendly text
+  const lineText = convertToLINE(currentBrief);
+  navigator.clipboard.writeText(lineText).then(() => {
+    const btn = e.target;
+    const original = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = original; }, 2000);
+  });
+}
+
+function convertToLINE(md) {
+  return md
+    // Remove markdown headers markers but keep text
+    .replace(/^#{1,3}\s+/gm, '')
+    // Convert table separators to simple lines
+    .replace(/^\|[-:\s|]+\|$/gm, '─────────────────────')
+    // Keep table content but simplify
+    .replace(/^\|\s*/gm, '│ ')
+    .replace(/\s*\|$/gm, '')
+    // Convert bold to LINE-friendly (using ○ key)
+    .replace(/\*\*(.+?)\*\*/g, '【$1】')
+    // Convert italic to LINE-friendly
+    .replace(/\*(.+?)\*/g, '〔$1〕')
+    // Convert bullet points
+    .replace(/^-\s+/gm, '• ')
+    .replace(/^  -\s+/gm, '  ↳ ')
+    // Clean up multiple newlines
+    .replace(/\n{3,}/g, '\n\n')
+    // Add header for LINE
+    .replace(/^/, '🎬 Production Brief\n📅 ' + new Date().toLocaleDateString() + '\n─────────────────────\n\n');
+}
+
+function copyToClipboard(e) {
   if (!currentBrief) return;
   navigator.clipboard.writeText(currentBrief).then(() => {
-    const btn = event.target;
+    const btn = e.target;
     const original = btn.textContent;
     btn.textContent = 'Copied!';
     setTimeout(() => { btn.textContent = original; }, 2000);

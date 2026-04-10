@@ -21,7 +21,9 @@ wrangler secret put GEMINI_API_KEY
 **Architecture:** URL → Cobalt API → Direct MP4 → Gemini 2.5 Flash → Analysis
 
 - **Cobalt** (public instance): Free, converts IG/TikTok URL to MP4
-- **Gemini 2.5 Flash**: 1M tokens/min free tier, video understanding
+- **Gemini 2.5 Flash**: Video understanding
+
+### 2. Start Worker
 
 ```bash
 cd worker
@@ -43,24 +45,36 @@ Frontend runs at: `http://localhost:3000`
 
 1. Open `http://localhost:3000`
 2. Enter Worker URL: `http://localhost:8788` (first time only)
-3. Paste video URL: `https://www.tiktok.com/@user/video/1234567890`
+3. Paste video URL: `https://www.instagram.com/reel/ABC123/`
 4. Optional: Add key message
 5. Click **Analyze Clip**
 6. Watch streaming results appear in real-time
+
+## Smoke Tests
+
+```bash
+cd worker
+
+# Run smoke test against local worker
+./test-smoke.sh http://localhost:8788
+
+# Run smoke test against production
+./test-smoke.sh https://clip-analyst-api.ssedtasak.workers.dev
+```
 
 ## Manual API Test
 
 ```bash
 curl -X POST http://localhost:8788 \
   -H "Content-Type: application/json" \
-  -d '{"url":"https://www.tiktok.com/@user/video/123","keyMessage":"test"}'
+  -d '{"url":"https://www.instagram.com/reel/ABC123/","keyMessage":"test"}'
 ```
 
 ## Troubleshooting
 
 | Issue | Fix |
 |-------|-----|
-| Worker won't start | Check `.dev.vars` has valid OpenAI key |
+| Worker won't start | Check `.dev.vars` has valid Gemini key |
 | CORS error | Ensure `ALLOWED_ORIGIN=http://localhost:8788` in `.dev.vars` |
 | Frontend prompt keeps appearing | Worker URL not saved — refresh page |
 | Streaming stops mid-way | Check Wrangler terminal for errors |

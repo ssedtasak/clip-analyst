@@ -2,7 +2,12 @@
  * Clip Analyst — Cloudflare Worker v5
  * Uses Cobalt API to get direct MP4 link, then Gemini 2.5 Flash for video analysis
  * Architecture per PDR: URL → Cobalt → MP4 → Gemini → Analysis
+ * 
+ * Budget monitoring: ~300 THB/month
+ * See quota.js for tracking details
  */
+
+import { incrementQuota, formatQuotaMessage } from './quota.js';
 
 // Cobalt API endpoint (self-hosted on Railway)
 const getCobaltUrl = (env) => {
@@ -286,8 +291,15 @@ export default {
         };
 
         try {
-          // Step 1: Get direct MP4 link via Cobalt
-          send({ step: 'Getting video link...' });
+          // Check quota before processing
+          const quotaStatus = incrementQuota();
+          const quotaWarning = formatQuotaMessage(quotaStatus);
+          if (quotaWarning) {
+            send({ step: quotaWarning, progress: 5 });
+          }
+
+          // Step 1: Get direct MP4 link via Cobalt (5-15%)
+          send({ step: 'Getting video link...', progress: 10 });
           let videoUrl;
           try {
             videoUrl = await getVideoUrl(getCobaltUrl(env), url, cobaltApiKey);
@@ -297,8 +309,8 @@ export default {
             return;
           }
 
-          // Step 2: Video Analysis with Gemini
-          send({ step: 'Analyzing shot-by-shot...' });
+          // Step 2: Video Analysis with Gemini (15-55%)
+          send({ step: 'Analyzing shot-by-shot...', progress: 20 });
           let analysisText;
           try {
             analysisText = await analyzeVideoWithGemini(videoUrl, geminiApiKey, PROMPTS.videoAnalysis, keyMessage);
@@ -309,10 +321,10 @@ export default {
           }
 
           // Stream the analysis result
-          send({ content: analysisText });
+          send({ content: analysisText, progress: 50 });
 
-          // Step 3: Brief Generation with Gemini
-          send({ step: 'Generating production brief...' });
+          // Step 3: Brief Generation with Gemini (55-95%)
+          send({ step: 'Generating production brief...', progress: 60 });
           let briefText;
           try {
             briefText = await analyzeVideoWithGemini(videoUrl, geminiApiKey, PROMPTS.briefGeneration, keyMessage);
@@ -323,9 +335,9 @@ export default {
           }
 
           // Stream the brief
-          send({ content: briefText });
+          send({ content: briefText, progress: 95 });
 
-          send({ done: true });
+          send({ done: true, progress: 100 });
           controller.close();
 
         } catch (error) {

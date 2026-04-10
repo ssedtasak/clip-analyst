@@ -6,19 +6,31 @@
   <title>Clip Analyst — AI Recreation Clip Analyst</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    .markdown-body table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.875rem; }
-    .markdown-body th, .markdown-body td { border: 1px solid #d1d5db; padding: 0.5rem 0.75rem; text-align: left; }
-    .markdown-body th { background: #f3f4f6; font-weight: 600; }
+    .markdown-body { line-height: 1.6; }
+    .markdown-body h1 { font-size: 1.5rem; font-weight: 700; margin: 1.5rem 0 0.75rem; }
     .markdown-body h2 { font-size: 1.25rem; font-weight: 700; margin: 1.5rem 0 0.75rem; padding-bottom: 0.25rem; border-bottom: 2px solid #e5e7eb; }
     .markdown-body h3 { font-size: 1.1rem; font-weight: 600; margin: 1rem 0 0.5rem; }
-    .markdown-body p { margin: 0.5rem 0; }
+    .markdown-body p { margin: 0.75rem 0; }
     .markdown-body ul { list-style: disc; padding-left: 1.5rem; margin: 0.5rem 0; }
+    .markdown-body li { margin: 0.25rem 0; }
+    .markdown-body .sub-item { margin-left: 1rem; }
     .markdown-body strong { font-weight: 700; }
     .markdown-body em { font-style: italic; }
+    
+    /* Table styles - fix overflow */
+    .table-wrapper { overflow-x: auto; margin: 1rem 0; border-radius: 0.5rem; border: 1px solid #e5e7eb; }
+    .markdown-body table { border-collapse: collapse; width: 100%; min-width: 600px; font-size: 0.875rem; }
+    .markdown-body th, .markdown-body td { border: 1px solid #d1d5db; padding: 0.75rem; text-align: left; vertical-align: top; white-space: pre-wrap; word-break: break-word; }
+    .markdown-body th { background: #f3f4f6; font-weight: 600; position: sticky; top: 0; }
+    .markdown-body td:first-child, .markdown-body th:first-child { width: 60px; text-align: center; font-weight: 600; }
+    .markdown-body td:nth-child(2), .markdown-body th:nth-child(2) { width: 80px; }
+    
+    /* Cell bullet points */
+    .cell-bullet { color: #6b7280; font-weight: 600; }
+    
     @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
     .animate-pulse-slow { animation: pulse 2s ease-in-out infinite; }
     .typing-cursor::after { content: '▋'; animation: pulse 1s infinite; }
-    .brand-card input[type="radio"]:checked + label { ring: 2px; }
   </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -77,6 +89,11 @@
       <div class="flex items-center gap-3 mb-4">
         <div class="w-5 h-5 border-2 border-gray-300 border-t-gray-900 rounded-full animate-spin"></div>
         <span id="loading-text" class="text-gray-700 font-medium">Analyzing clip...</span>
+        <span id="loading-percent" class="ml-auto text-sm font-semibold text-gray-500">0%</span>
+      </div>
+      <!-- Progress Bar -->
+      <div class="w-full bg-gray-200 rounded-full h-2.5 mb-4">
+        <div id="progress-bar" class="bg-gray-900 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
       </div>
       <div class="space-y-2">
         <div class="h-4 bg-gray-100 rounded animate-pulse-slow"></div>
@@ -96,18 +113,30 @@
       </div>
 
       <!-- Export Buttons -->
-      <div class="flex gap-3">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
         <button
           onclick="downloadMarkdown()"
-          class="flex-1 py-2.5 px-4 bg-gray-900 text-white font-medium rounded-lg hover:bg-gray-800 transition-colors text-sm"
+          class="py-2.5 px-3 bg-gray-900 text-white font-medium rounded-lg hover:bg-gray-800 transition-colors text-sm"
         >
-          Download .md
+          📄 .md
         </button>
         <button
-          onclick="copyToClipboard()"
-          class="flex-1 py-2.5 px-4 bg-white text-gray-700 font-medium rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors text-sm"
+          onclick="downloadPDF()"
+          class="py-2.5 px-3 bg-gray-900 text-white font-medium rounded-lg hover:bg-gray-800 transition-colors text-sm"
         >
-          Copy to Clipboard
+          �PDF
+        </button>
+        <button
+          onclick="copyToLINE(event)"
+          class="py-2.5 px-3 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition-colors text-sm"
+        >
+          📱 LINE
+        </button>
+        <button
+          onclick="copyToClipboard(event)"
+          class="py-2.5 px-3 bg-white text-gray-700 font-medium rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors text-sm"
+        >
+          📋 Copy
         </button>
       </div>
     </div>
